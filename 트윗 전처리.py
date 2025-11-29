@@ -2,7 +2,7 @@ import pandas as pd
 import re
 
 # === 1. 원본 엑셀 불러오기 ===
-input_file = "trump_posts_all.xlsx"
+input_file = "trump_posts_scraped.xlsx"
 output_file = "trump_posts_cleaned.xlsx"
 df = pd.read_excel(input_file)
 

@@ -100,10 +100,15 @@ def collect_new_posts(driver, existing_urls, max_count=100):
             timestamp_raw = time_tag['title'] if time_tag and time_tag.has_attr('title') else "N/A"
             et_time = kst_to_et(timestamp_raw) if timestamp_raw != "N/A" else "N/A"
 
+            # Preprocess content
+            from modules.preprocessor import preprocess_tweet
+            clean_content = preprocess_tweet(text)
+
             collected.append({
                 "time": et_time,
                 "kst_time": timestamp_raw,
                 "content": text,
+                "clean_content": clean_content,
                 "url": url
             })
 

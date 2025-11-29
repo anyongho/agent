@@ -31,12 +31,16 @@ async def process_new_posts(new_posts, analyzer, storage):
 
     for i, post in enumerate(new_posts, 1):
         print(f"\n[{i}/{len(new_posts)}] 분석 중...")
-        analysis = await analyzer.analyze_tweet(post['content'])
+        
+        # Use cleaned content for analysis
+        target_content = post.get('clean_content', post['content'])
+        analysis = await analyzer.analyze_tweet(target_content)
         
         result_data = {
             'time': post['time'],          # US Time (Numeric/String)
             'posted_time': post['kst_time'], # KST Time String (time_str)
-            'tweet_content': post['content'],
+            'tweet_content': target_content, # Save cleaned content to DB
+            'original_content': post['content'], # Optional: keep original if needed
             'tweet_url': post.get('url', None),
             'impact_on_market': analysis.get('impact_on_market', 'Unknown'),
             'sentiment_score': analysis.get('sentiment_score', 0.0),
