@@ -16,7 +16,7 @@ supabase = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
 # ---------------------------------------------------------
 # 2. 엑셀 파일 읽기
 # ---------------------------------------------------------
-excel_file = 'merged_all_excel.xlsx'
+excel_file = 'trump_posts_all_analyzed_final.xlsx'
 if not os.path.exists(excel_file):
     print(f"❌ {excel_file} 파일이 없습니다.")
     exit()

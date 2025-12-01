@@ -35,7 +35,7 @@ class Storage:
                 row = {
                     "url": item.get('tweet_url'),
                     "content": item.get('tweet_content'),
-                    "time_str": item.get('posted_time'),
+                    "time_str": item.get('time_str'),
                     "time": item.get('time'), # Ensure this key exists in results or map from posted_time
                     "impact_on_market": item.get('impact_on_market'),
                     "sentiment_score": item.get('sentiment_score'),

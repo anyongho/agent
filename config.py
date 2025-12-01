@@ -13,6 +13,7 @@ class Config:
     
     # Analysis
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-5-nano")
     
     # Scraper
     TRUTH_SOCIAL_URL = "https://truthsocial.com/@realDonaldTrump"

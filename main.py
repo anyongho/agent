@@ -10,6 +10,7 @@ from config import Config
 from modules.scraper import get_driver, collect_new_posts
 from modules.analyzer import TrumpAnalyzer
 from modules.storage import Storage
+from modules.preprocessor import preprocess_tweet
 from plyer import notification
 
 def send_notification(count):
@@ -33,12 +34,16 @@ async def process_new_posts(new_posts, analyzer, storage):
         print(f"\n[{i}/{len(new_posts)}] 분석 중...")
         
         # Use cleaned content for analysis
-        target_content = post.get('clean_content', post['content'])
+        target_content = preprocess_tweet(post['content'])
+        
+        if not target_content:
+            print(f"⚠️ 전처리 후 내용 없음 (Skip): {post.get('url')}")
+            continue
         analysis = await analyzer.analyze_tweet(target_content)
         
         result_data = {
             'time': post['time'],          # US Time (Numeric/String)
-            'posted_time': post['kst_time'], # KST Time String (time_str)
+            'time_str': post['kst_time'], # KST Time String (time_str)
             'tweet_content': target_content, # Save cleaned content to DB
             'original_content': post['content'], # Optional: keep original if needed
             'tweet_url': post.get('url', None),
@@ -64,7 +69,7 @@ async def main_async():
     driver = get_driver()
     
     try:
-        new_posts = collect_new_posts(driver, existing_urls, max_count=10)
+        new_posts = collect_new_posts(driver, existing_urls, max_count=100)
         
         if new_posts:
             print(f"\n✅ {len(new_posts)}개 신규 글 발견")
