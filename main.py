@@ -2,6 +2,7 @@ import asyncio
 import time
 import sys
 import os
+import re
 
 # Add current directory to path to ensure modules can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -9,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import Config
 from modules.scraper import get_driver, collect_new_posts
 from modules.analyzer import TrumpAnalyzer
+from modules.reporter import TrumpReporter
 from modules.storage import Storage
 from modules.preprocessor import preprocess_tweet
 from plyer import notification
@@ -24,7 +26,7 @@ def send_notification(count):
     except Exception as e:
         print(f"⚠️ 알림 전송 실패: {e}")
 
-async def process_new_posts(new_posts, analyzer, storage):
+async def process_new_posts(new_posts, analyzer, reporter, storage):
     results = []
     print(f"\n{'='*60}")
     print(f"🤖 AI 분석 시작: {len(new_posts)}개 트윗")
@@ -56,12 +58,83 @@ async def process_new_posts(new_posts, analyzer, storage):
         }
         results.append(result_data)
 
-    # Save results
-    storage.save_results(new_posts, results)
+    # Save results to posts table and get IDs
+    url_id_map = storage.save_results(new_posts, results)
+    
+    # Generate reports for high-impact tweets
+    print(f"\n{'='*60}")
+    print(f"📊 리포트 생성 대상 확인 중...")
+    print(f"{'='*60}\n")
+    
+    
+    # Helper function to check if last sentence contains ticker symbols
+    def has_ticker_in_last_sentence(reason_text):
+        """
+        Check if the last sentence of reason contains ticker symbols
+        Expected format: "NVDA, TSM, AMD." or "NVDA."
+        """
+        if not reason_text:
+            return False
+        
+        # Split by period and get the last non-empty sentence
+        sentences = [s.strip() for s in reason_text.split('.') if s.strip()]
+        if not sentences:
+            return False
+        
+        last_sentence = sentences[-1]
+        
+        # Pattern: One or more uppercase ticker symbols (1-5 letters) separated by commas
+        # Example: "NVDA, TSM, AMD" or "NVDA" or "AAPL, MSFT"
+        ticker_pattern = r'^[A-Z]{1,5}(\s*,\s*[A-Z]{1,5})*$'
+        
+        return bool(re.match(ticker_pattern, last_sentence))
+    
+    for result_data in results:
+        impact = result_data.get('impact_on_market')
+        score = result_data.get('market_impact_score', 0.0)
+        tweet_url = result_data.get('tweet_url')
+        reason = result_data.get('reason', '')
+        
+        # Check conditions: 
+        # 1) Direct impact 
+        # 2) score >= 0.5
+        # 3) reason의 마지막 문장에 티커가 있는지
+        if impact == 'Direct' and score >= 0.5 and has_ticker_in_last_sentence(reason):
+            print(f"\n✅ 리포트 생성 조건 만족 (영향도: {score}, 티커 확인됨)")
+            
+            # Get post ID from url_id_map
+            post_id = url_id_map.get(tweet_url)
+            
+            if post_id:
+                # Generate report
+                report = await reporter.generate_report(
+                    {
+                        'impact_on_market': impact,
+                        'sentiment_score': result_data.get('sentiment_score'),
+                        'market_impact_score': score,
+                        'keywords': result_data.get('keywords'),
+                        'sector': result_data.get('sector'),
+                        'reason': reason
+                    },
+                    result_data.get('tweet_content')
+                )
+                
+                # Save report to analyze table
+                storage.save_report_to_supabase(
+                    post_id,
+                    report,
+                    result_data.get('time_str')
+                )
+            else:
+                print(f"⚠️ Post ID를 찾을 수 없습니다: {tweet_url}")
+        else:
+            has_ticker = has_ticker_in_last_sentence(reason)
+            print(f"⏭️ 리포트 생성 조건 미충족 (Impact: {impact}, Score: {score}, Ticker: {has_ticker})")
 
 async def main_async():
     storage = Storage()
     analyzer = TrumpAnalyzer()
+    reporter = TrumpReporter()
     
     # Load existing URLs to avoid duplicates
     existing_urls = storage.get_existing_urls()
@@ -80,8 +153,8 @@ async def main_async():
             # Notify
             send_notification(len(new_posts))
             
-            # Analyze and Save to DB/Excel
-            await process_new_posts(new_posts, analyzer, storage)
+            # Analyze, Generate Reports, and Save to DB/Excel
+            await process_new_posts(new_posts, analyzer, reporter, storage)
             
         else:
             print("🔄 신규 글 없음")

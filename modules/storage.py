@@ -18,15 +18,24 @@ class Storage:
     def save_results(self, new_posts, analysis_results):
         """
         Save results to both Supabase and Excel (as backup)
+        Returns: Dictionary mapping tweet URLs to their database IDs
         """
+        url_id_map = {}
+        
         # 1. Save to Supabase
         if self.supabase:
-            self._save_to_supabase(analysis_results)
+            url_id_map = self._save_to_supabase(analysis_results)
 
         # 2. Save to Excel (Legacy/Backup)
         self._save_to_excel(analysis_results)
+        
+        return url_id_map
 
     def _save_to_supabase(self, results):
+        """
+        Save analysis results to Supabase posts table
+        Returns: List of inserted/updated post IDs with their tweet URLs
+        """
         try:
             # Prepare data for Supabase
             # Unified Schema Mapping
@@ -49,8 +58,18 @@ class Storage:
             if data_to_insert:
                 response = self.supabase.table("posts").upsert(data_to_insert, on_conflict="url").execute()
                 print(f"✅ Supabase 저장 완료: {len(data_to_insert)}개 항목")
+                
+                # Return list of (url, id) tuples for report generation
+                inserted_data = response.data
+                url_id_map = {}
+                if inserted_data:
+                    for record in inserted_data:
+                        url_id_map[record.get('url')] = record.get('id')
+                return url_id_map
+            return {}
         except Exception as e:
             print(f"⚠️ Supabase 저장 오류: {e}")
+            return {}
 
     def _save_to_excel(self, results, filename="trump_posts_AI_analysis.xlsx"):
         if not results:
@@ -97,3 +116,35 @@ class Storage:
             df.to_excel(excel_path, index=False)
         except Exception as e:
             print(f"⚠️ Raw 데이터 저장 오류: {e}")
+
+    def save_report_to_supabase(self, post_id, report_data, tweet_time_str):
+        """
+        Save report data to Supabase analyze table
+        
+        Args:
+            post_id: ID from posts table
+            report_data: Dict containing title, forecast, posts, model, stock
+            tweet_time_str: Original tweet timestamp (KST)
+        """
+        if not self.supabase:
+            print("⚠️ Supabase 연결이 없어 리포트를 저장할 수 없습니다.")
+            return
+        
+        try:
+            from datetime import datetime
+            
+            report_row = {
+                "id": post_id,
+                "title": report_data.get('title', ''),
+                "time": datetime.now().isoformat(),  # 리포트 생성 시간
+                "forecast": report_data.get('forecast', ''),
+                "posts": report_data.get('posts', ''),
+                "model": report_data.get('model', 0.0),
+                "stock": report_data.get('stock', '')
+            }
+            
+            response = self.supabase.table("analyze").upsert(report_row, on_conflict="id").execute()
+            print(f"✅ 리포트 저장 완료 (ID: {post_id}): {report_data.get('title')[:30]}...")
+            
+        except Exception as e:
+            print(f"⚠️ 리포트 저장 오류: {e}")
